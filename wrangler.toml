@@ -1,0 +1,7 @@
+name = "buzon-quejas"
+compatibility_date = "2024-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "buzon-quejas-db"
+database_id = "REEMPLAZA_CON_TU_DATABASE_ID"

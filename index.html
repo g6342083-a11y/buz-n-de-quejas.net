@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Buzón de Quejas</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📬 Buzón de Quejas</h1>
+      <p>Tu opinión nos ayuda a mejorar. Cuéntanos qué pasó.</p>
+    </header>
+
+    <div class="card">
+      <div id="exito" class="mensaje-exito"></div>
+      <div id="error" class="mensaje-error"></div>
+
+      <form id="form-queja">
+        <label for="nombre">Nombre *</label>
+        <input type="text" id="nombre" name="nombre" required maxlength="100" placeholder="Tu nombre" />
+
+        <label for="email">Email (opcional)</label>
+        <input type="email" id="email" name="email" maxlength="150" placeholder="tu@email.com" />
+
+        <label for="categoria">Categoría *</label>
+        <select id="categoria" name="categoria" required>
+          <option value="general">General</option>
+          <option value="servicio">Servicio</option>
+          <option value="producto">Producto</option>
+          <option value="facturacion">Facturación</option>
+          <option value="personal">Atención al personal</option>
+          <option value="instalaciones">Instalaciones</option>
+          <option value="otro">Otro</option>
+        </select>
+
+        <label for="prioridad">Prioridad *</label>
+        <select id="prioridad" name="prioridad" required>
+          <option value="">— Selecciona —</option>
+          <option value="baja">Baja</option>
+          <option value="media">Media</option>
+          <option value="alta">Alta</option>
+        </select>
+
+        <label for="mensaje">¿Qué pasó? *</label>
+        <textarea id="mensaje" name="mensaje" required minlength="10" maxlength="5000"
+          placeholder="Describe tu queja con el mayor detalle posible (mínimo 10 caracteres)."></textarea>
+
+        <button type="submit" id="btn-enviar">Enviar queja</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("form-queja");
+    const btn = document.getElementById("btn-enviar");
+    const exito = document.getElementById("exito");
+    const error = document.getElementById("error");
+
+    function mostrar(el, texto) {
+      el.textContent = texto;
+      el.style.display = "block";
+      setTimeout(() => { el.style.display = "none"; }, 6000);
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      btn.textContent = "Enviando…";
+
+      const data = {
+        nombre: document.getElementById("nombre").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        categoria: document.getElementById("categoria").value,
+        prioridad: document.getElementById("prioridad").value,
+        mensaje: document.getElementById("mensaje").value.trim(),
+      };
+
+      try {
+        const res = await fetch("/api/complaints", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        const json = await res.json();
+
+        if (!res.ok) {
+          mostrar(error, json.error || "Error al enviar la queja");
+        } else {
+          mostrar(exito, `✅ Queja #${json.id} registrada. Gracias por tu mensaje.`);
+          form.reset();
+        }
+      } catch (err) {
+        mostrar(error, "No se pudo conectar con el servidor. Intenta de nuevo.");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Enviar queja";
+      }
+    });
+  </script>
+</body>
+</html>

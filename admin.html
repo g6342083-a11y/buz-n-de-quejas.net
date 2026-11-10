@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel de Quejas — Admin</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🗂️ Panel de Quejas</h1>
+      <p>Administración de quejas recibidas</p>
+    </header>
+
+    <div id="login-card" class="card">
+      <label for="password">Contraseña de administrador</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" />
+      <button id="btn-login">Entrar</button>
+      <div id="login-error" class="mensaje-error" style="margin-top:14px;"></div>
+    </div>
+
+    <div id="panel" class="oculto">
+      <div class="admin-toolbar">
+        <select id="filtro-prioridad">
+          <option value="">Todas las prioridades</option>
+          <option value="alta">Alta</option>
+          <option value="media">Media</option>
+          <option value="baja">Baja</option>
+        </select>
+        <select id="filtro-estado">
+          <option value="">Todos los estados</option>
+          <option value="nueva">Nueva</option>
+          <option value="en_revision">En revisión</option>
+          <option value="resuelta">Resuelta</option>
+        </select>
+        <select id="filtro-categoria">
+          <option value="">Todas las categorías</option>
+          <option value="general">General</option>
+          <option value="servicio">Servicio</option>
+          <option value="producto">Producto</option>
+          <option value="facturacion">Facturación</option>
+          <option value="personal">Atención al personal</option>
+          <option value="instalaciones">Instalaciones</option>
+          <option value="otro">Otro</option>
+        </select>
+        <button id="btn-refresh" class="btn-outline">Actualizar</button>
+        <button id="btn-logout" class="btn-outline">Salir</button>
+      </div>
+      <div id="lista-quejas"></div>
+    </div>
+  </div>
+
+  <script>
+    let password = sessionStorage.getItem("admin_pw") || "";
+    const loginCard = document.getElementById("login-card");
+    const panel = document.getElementById("panel");
+    const lista = document.getElementById("lista-quejas");
+
+    const PRIORIDAD_LABEL = { alta: "Alta", media: "Media", baja: "Baja" };
+    const ESTADO_LABEL = { nueva: "Nueva", en_revision: "En revisión", resuelta: "Resuelta" };
+    const CATEGORIA_LABEL = {
+      general: "General", servicio: "Servicio", producto: "Producto",
+      facturacion: "Facturación", personal: "Atención al personal",
+      instalaciones: "Instalaciones", otro: "Otro",
+    };
+
+    function headers() { return { "X-Admin-Password": password }; }
+
+    function mostrarErrorLogin(msg) {
+      const el = document.getElementById("login-error");
+      el.textContent = msg;
+      el.style.display = "block";
+    }
+
+    function formatearFecha(iso) {
+      try {
+        return new Date(iso + "Z").toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" });
+      } catch { return iso; }
+    }
+
+    function crearQuejaElemento(q) {
+      const div = document.createElement("div");
+      div.className = `queja ${q.prioridad}`;
+
+      const header = document.createElement("div");
+      header.className = "queja-header";
+
+      const left = document.createElement("div");
+      const nombre = document.createElement("div");
+      nombre.className = "queja-nombre";
+      nombre.textContent = `#${q.id} · ${q.nombre}`;
+      const meta = document.createElement("div");
+      meta.className = "queja-meta";
+      meta.textContent = `${CATEGORIA_LABEL[q.categoria] || q.categoria} · ${formatearFecha(q.creada_en)}${q.email ? " · " + q.email : ""}`;
+      left.appendChild(nombre);
+      left.appendChild(meta);
+
+      const badge = document.createElement("span");
+      badge.className = `badge ${q.prioridad}`;
+      badge.textContent = PRIORIDAD_LABEL[q.prioridad] || q.prioridad;
+
+      header.appendChild(left);
+      header.appendChild(badge);
+
+      const mensaje = document.createElement("div");
+      mensaje.className = "queja-mensaje";
+      mensaje.textContent = q.mensaje;
+
+      const footer = document.createElement("div");
+      footer.className = "queja-footer";
+
+      const estadoSelect = document.createElement("select");
+      ["nueva", "en_revision", "resuelta"].forEach((est) => {
+        const opt = document.createElement("option");
+        opt.value = est;
+        opt.textContent = ESTADO_LABEL[est];
+        if (est === q.estado) opt.selected = true;
+        estadoSelect.appendChild(opt);
+      });
+      estadoSelect.addEventListener("change", () => actualizarEstado(q.id, estadoSelect.value));
+
+      const estadoTxt = document.createElement("span");
+      estadoTxt.className = "queja-meta";
+      estadoTxt.textContent = `Estado actual: ${ESTADO_LABEL[q.estado]}`;
+
+      footer.appendChild(estadoTxt);
+      footer.appendChild(estadoSelect);
+
+      div.appendChild(header);
+      div.appendChild(mensaje);
+      div.appendChild(footer);
+      return div;
+    }
+
+    async function cargarQuejas() {
+      lista.innerHTML = '<div class="vacio">Cargando…</div>';
+      const params = new URLSearchParams();
+      const pr = document.getElementById("filtro-prioridad").value;
+      const es = document.getElementById("filtro-estado").value;
+      const ca = document.getElementById("filtro-categoria").value;
+      if (pr) params.set("prioridad", pr);
+      if (es) params.set("estado", es);
+      if (ca) params.set("categoria", ca);
+
+      try {
+        const res = await fetch("/api/complaints?" + params.toString(), { headers: headers() });
+        if (res.status === 401) { cerrarSesion("Contraseña incorrecta"); return; }
+        const json = await res.json();
+        if (!res.ok) { lista.innerHTML = `<div class="vacio">Error: ${json.error || "desconocido"}</div>`; return; }
+        if (!json.quejas.length) { lista.innerHTML = '<div class="vacio">No hay quejas con estos filtros.</div>'; return; }
+        lista.innerHTML = "";
+        json.quejas.forEach((q) => lista.appendChild(crearQuejaElemento(q)));
+      } catch (err) {
+        lista.innerHTML = '<div class="vacio">Error de conexión.</div>';
+      }
+    }
+
+    async function actualizarEstado(id, estado) {
+      try {
+        const res = await fetch("/api/complaints", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...headers() },
+          body: JSON.stringify({ id, estado }),
+        });
+        if (!res.ok) alert("No se pudo actualizar el estado.");
+        else cargarQuejas();
+      } catch { alert("Error de conexión al actualizar."); }
+    }
+
+    function cerrarSesion(msg) {
+      password = "";
+      sessionStorage.removeItem("admin_pw");
+      panel.classList.add("oculto");
+      loginCard.classList.remove("oculto");
+      if (msg) mostrarErrorLogin(msg);
+    }
+
+    async function intentarLogin() {
+      password = document.getElementById("password").value;
+      if (!password) { mostrarErrorLogin("Escribe la contraseña."); return; }
+      document.getElementById("login-error").style.display = "none";
+
+      try {
+        const res = await fetch("/api/complaints", { headers: headers() });
+        if (res.status === 401) { mostrarErrorLogin("Contraseña incorrecta."); password = ""; return; }
+        if (!res.ok) { mostrarErrorLogin("Error del servidor."); return; }
+        sessionStorage.setItem("admin_pw", password);
+        loginCard.classList.add("oculto");
+        panel.classList.remove("oculto");
+        cargarQuejas();
+      } catch { mostrarErrorLogin("Error de conexión."); }
+    }
+
+    document.getElementById("btn-login").addEventListener("click", intentarLogin);
+    document.getElementById("password").addEventListener("keydown", (e) => { if (e.key === "Enter") intentarLogin(); });
+    document.getElementById("btn-refresh").addEventListener("click", cargarQuejas);
+    document.getElementById("btn-logout").addEventListener("click", () => cerrarSesion());
+    document.getElementById("filtro-prioridad").addEventListener("change", cargarQuejas);
+    document.getElementById("filtro-estado").addEventListener("change", cargarQuejas);
+    document.getElementById("filtro-categoria").addEventListener("change", cargarQuejas);
+
+    if (password) { intentarLogin(); }
+  </script>
+</body>
+</html>
